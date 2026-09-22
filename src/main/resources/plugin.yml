@@ -1,0 +1,13 @@
+name: FEATOCoinExchange
+version: ${version}
+main: jp.feato.coinexchange.CoinExchangePlugin
+description: Safely exchanges FEATO Ancient Coins through console-triggered NPC actions.
+authors:
+  - FEATO
+api-version: '26.2'
+depend:
+  - Vault
+commands:
+  feato-coin-exchange:
+    description: Exchange one FEATO Ancient Coin for currency.
+    usage: /feato-coin-exchange <player>
