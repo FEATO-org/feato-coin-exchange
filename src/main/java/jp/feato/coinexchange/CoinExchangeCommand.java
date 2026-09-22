@@ -38,10 +38,6 @@ final class CoinExchangeCommand implements CommandExecutor {
             @NotNull Command command,
             @NotNull String label,
             @NotNull String[] args) {
-        if (!(sender instanceof ConsoleCommandSender)) {
-            sender.sendMessage(Component.text("このコマンドはコンソール専用です。", NamedTextColor.RED));
-            return true;
-        }
         if (args.length != 1) {
             sender.sendMessage(Component.text("Usage: /" + label + " <player>", NamedTextColor.RED));
             return true;
