@@ -1,5 +1,7 @@
 package jp.feato.coinexchange;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -17,6 +19,8 @@ import org.jetbrains.annotations.NotNull;
 
 final class CoinExchangeCommand implements CommandExecutor {
     private static final Component NO_COIN = Component.text("交換できる古銭を持っていません。", NamedTextColor.RED);
+    private static final Component CONSOLE_ONLY =
+            Component.text("このコマンドはコンソールからのみ実行できます。", NamedTextColor.RED);
     private static final Component ECONOMY_ERROR =
             Component.text("古銭の交換に失敗しました。管理者にお問い合わせください。", NamedTextColor.RED);
 
@@ -38,6 +42,10 @@ final class CoinExchangeCommand implements CommandExecutor {
             @NotNull Command command,
             @NotNull String label,
             @NotNull String[] args) {
+        if (!(sender instanceof ConsoleCommandSender)) {
+            sender.sendMessage(CONSOLE_ONLY);
+            return true;
+        }
         if (args.length != 1) {
             sender.sendMessage(Component.text("Usage: /" + label + " <player>", NamedTextColor.RED));
             return true;
@@ -49,65 +57,76 @@ final class CoinExchangeCommand implements CommandExecutor {
             return true;
         }
 
-        CoinSlot coinSlot = findCoin(player.getInventory());
-        if (coinSlot == null) {
+        List<CoinSlot> coinSlots = findCoins(player.getInventory());
+        if (coinSlots.isEmpty()) {
             player.sendMessage(NO_COIN);
             return true;
         }
 
-        ItemStack original = coinSlot.item().clone();
-        consumeOne(coinSlot);
+        int coinCount = coinSlots.stream().mapToInt(slot -> slot.original().getAmount()).sum();
+        double depositAmount = exchangeValue * coinCount;
+        consumeAll(coinSlots);
 
         EconomyResponse response;
         try {
-            response = economy.depositPlayer(player, exchangeValue);
+            response = economy.depositPlayer(player, depositAmount);
         } catch (RuntimeException exception) {
-            restore(coinSlot, original, player, "Vault deposit threw an exception", exception);
+            restore(coinSlots, player, depositAmount, "Vault deposit threw an exception", exception);
             return true;
         }
 
         if (response == null || !response.transactionSuccess()) {
             String detail = response == null ? "null EconomyResponse" : response.errorMessage;
-            restore(coinSlot, original, player, "Vault deposit failed: " + detail, null);
+            restore(coinSlots, player, depositAmount, "Vault deposit failed: " + detail, null);
             return true;
         }
 
-        String amount = BalanceFormatter.format(exchangeValue);
+        String amount = BalanceFormatter.format(depositAmount);
         String balance = BalanceFormatter.format(economy.getBalance(player));
-        player.sendMessage(Component.text("古銭1枚を" + amount + "Gに交換しました。", NamedTextColor.GREEN));
+        player.sendMessage(Component.text(
+                "古銭" + coinCount + "枚を" + amount + "Gに交換しました。", NamedTextColor.GREEN));
         player.sendMessage(Component.text("現在残高: " + balance + "G", NamedTextColor.YELLOW));
         return true;
     }
 
-    private CoinSlot findCoin(PlayerInventory inventory) {
+    private List<CoinSlot> findCoins(PlayerInventory inventory) {
+        List<CoinSlot> result = new ArrayList<>();
         ItemStack[] storage = inventory.getStorageContents();
         for (int slot = 0; slot < storage.length; slot++) {
             ItemStack item = storage[slot];
             if (matcher.matches(item)) {
-                return new CoinSlot(inventory, slot, false, item);
+                result.add(new CoinSlot(inventory, slot, false, item.clone()));
             }
         }
 
         ItemStack offHand = inventory.getItemInOffHand();
-        return matcher.matches(offHand) ? new CoinSlot(inventory, -1, true, offHand) : null;
+        if (matcher.matches(offHand)) {
+            result.add(new CoinSlot(inventory, -1, true, offHand.clone()));
+        }
+        return result;
     }
 
-    private void consumeOne(CoinSlot slot) {
-        ItemStack reduced = slot.item().clone();
-        if (reduced.getAmount() == 1) {
+    private void consumeAll(List<CoinSlot> slots) {
+        for (CoinSlot slot : slots) {
             slot.set(null);
-        } else {
-            reduced.setAmount(reduced.getAmount() - 1);
-            slot.set(reduced);
         }
     }
 
-    private void restore(CoinSlot slot, ItemStack original, Player player, String reason, RuntimeException exception) {
+    private void restore(
+            List<CoinSlot> slots,
+            Player player,
+            double amount,
+            String reason,
+            RuntimeException exception) {
         try {
-            slot.set(original);
+            for (CoinSlot slot : slots) {
+                slot.set(slot.original().clone());
+            }
         } catch (RuntimeException restoreException) {
-            plugin.getLogger().log(Level.SEVERE,
-                    "Failed to restore an Ancient Coin for player " + player.getName(), restoreException);
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "Failed to restore Ancient Coins for player " + player.getName(),
+                    restoreException);
             if (exception != null) {
                 restoreException.addSuppressed(exception);
             }
@@ -116,16 +135,17 @@ final class CoinExchangeCommand implements CommandExecutor {
         }
 
         if (exception == null) {
-            plugin.getLogger().warning(reason + " for player " + player.getName()
-                    + " (amount=" + exchangeValue + ")");
+            plugin.getLogger().warning(reason + " for player " + player.getName() + " (amount=" + amount + ")");
         } else {
-            plugin.getLogger().log(Level.SEVERE,
-                    reason + " for player " + player.getName() + " (amount=" + exchangeValue + ")", exception);
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    reason + " for player " + player.getName() + " (amount=" + amount + ")",
+                    exception);
         }
         player.sendMessage(ECONOMY_ERROR);
     }
 
-    private record CoinSlot(PlayerInventory inventory, int index, boolean offHand, ItemStack item) {
+    private record CoinSlot(PlayerInventory inventory, int index, boolean offHand, ItemStack original) {
         void set(ItemStack replacement) {
             if (offHand) {
                 inventory.setItemInOffHand(replacement);

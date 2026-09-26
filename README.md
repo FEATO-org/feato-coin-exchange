@@ -2,7 +2,7 @@
 
 ## Overview
 
-FEATO Ancient Coin が生成する古銭をゲーム内通貨へ交換する専用 Paper Plugin です。古銭1枚を10G（`config.yml` で変更可能）へ交換し、NPCなどが発行するコンソールコマンドからのみ利用できます。古銭の生成、Loot、NPC、GUI機能は持ちません。
+FEATO Ancient Coin が生成する古銭をゲーム内通貨へ交換する専用 Paper Plugin です。古銭1枚を50G（`config.yml` で変更可能）へ交換し、NPCなどが発行するコンソールコマンドからのみ利用できます。古銭の生成、Loot、NPC、GUI機能は持ちません。
 
 ## Requirements
 
@@ -21,7 +21,7 @@ FEATO Ancient Coin が生成する古銭をゲーム内通貨へ交換する専�
 /feato-coin-exchange <player>
 ```
 
-オンラインPlayerの古銭を1枚だけ交換します。Bukkit ConsoleSenderからの実行専用で、一般Player・OP Playerのどちらからも直接実行できません。
+オンラインPlayerのインベントリとオフハンドにある有効な古銭を1回ですべて交換します。Bukkit ConsoleSenderからの実行専用で、一般Player・OP Playerのどちらからも直接実行できません。
 
 ## FancyNpcs
 
@@ -47,12 +47,12 @@ Item nameやLoreなど、識別対象外のData Componentは変更されても�
 
 ## Economy and transaction safety
 
-Vault Economy APIの `depositPlayer` を使用します。対象slotのItemStackをcloneして1枚消費した後に入金し、`EconomyResponse` が失敗を示すか入金処理が例外を投げた場合は、cloneした正確なItemStackを元のslotへ復元します。
+Vault Economy APIの `depositPlayer` を使用します。交換対象の全slotを一度だけ走査し、対象ItemStackをcloneしてから古銭を一括消費し、合計額をVaultへ1回だけ入金します。`EconomyResponse` が失敗を示すか入金処理が例外を投げた場合は、cloneしたItemStackを元のslotへ復元します。
 
 交換額は `plugins/FEATOCoinExchange/config.yml` の次の値で管理します。
 
 ```yaml
-exchange-value: 10.0
+exchange-value: 50.0
 ```
 
 ## Build
